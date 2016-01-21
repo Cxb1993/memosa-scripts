@@ -5,6 +5,8 @@ sys.setdlopenflags(0x100|0x2)
 
 import fvm.fvmbaseExt as fvmbaseExt
 import fvm.importers as importers
+import numpy as np
+import pdb
 
 atype = 'double'
 #atype = 'tangent'
@@ -76,10 +78,14 @@ fmodel = models.FlowModelA(geomFields,flowFields,meshes)
 
 reader.importFlowBCs(fmodel,meshes)
 bcMap = fmodel.getBCMap()
+
+bc = bcMap[7]
+bc.setVar("specifiedXVelocity",0.0)
+
 for i in [5,6,8,9,10]:
     bc = bcMap[i]
-    bc.bcType = 'Symmetry'
-    #bc.bcType = 'NoSlipWall'
+    #bc.bcType = 'Symmetry'
+    bc.bcType = 'NoSlipWall'
 fmodel.printBCs()
 
 momSolver = fvmbaseExt.AMG()
@@ -120,6 +126,29 @@ if atype=='tangent':
 """
 numTimeSteps = 0
 fmodel.init()
+
+cells = meshes[0].getCells()
+faces = meshes[0].getFaces()
+faceCells = meshes[0].getAllFaceCells()
+source = flowFields.source[cells].asNumPyArray()
+rho = flowFields.density[cells].asNumPyArray()
+CellCoord = geomFields.coordinate[cells].asNumPyArray()
+cellPressure = flowFields.pressure[cells].asNumPyArray()
+facePressure = flowFields.pressure[faces].asNumPyArray()
+grav = np.array([0.0,-9.81,0.0])
+
+source[:] = 0.0
+
+for c in range(cells.getSelfCount()):
+    source[c] = rho[c]*grav
+    cellPressure[c] = rho[c]*grav[1]*CellCoord[c,1]
+
+for f in range(faces.getSelfCount()):
+    c0 = faceCells(f,0)                                                                                                  
+    c1 = faceCells(f,1)
+    facePressure[f] = 0.5*(cellPressure[c0]+cellPressure[c1])
+
+pdb.set_trace()
 writer = exporters.VTKWriterA(geomFields,meshes,"flow-" + str(numTimeSteps) + ".vtk",
                               "FlowField",False,0)
 writer.init()
@@ -127,7 +156,7 @@ writer.writeScalarField(flowFields.pressure,"Pressure")
 writer.writeVectorField(flowFields.velocity,"Velocity")
 writer.finish()
 
-while (numTimeSteps < 1):
+while (numTimeSteps < 100):
     #advance(fmodel,numIterations)
     fmodel.advance(50)
     fmodel.updateTime()

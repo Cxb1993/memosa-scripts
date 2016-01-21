@@ -81,7 +81,7 @@ reader.importFlowBCs(fmodel,meshes)
 bcMap = fmodel.getBCMap()
 bcMapTherm = tmodel.getBCMap()
 bcMapTherm[7].bcType = 'Symmetry'
-for i in [5,6,7,8,9,10]:
+for i in [5,6,8,9,10]:
     bc = bcMap[i]
     bc.bcType = 'Symmetry'
     bcMapTherm.bcType = 'Symmetry'
@@ -161,10 +161,11 @@ tmodel.init()
 
 grav = np.array([0.0,-9.81,0.0])
 
-rhoH20 = 1000.0
+rhoH20 = 1.2
 rhoAir = 1.2
 
-muH20 = 1.002E-3
+#muH20 = 1.002E-3
+muH20 = 1.846E-5
 muAir = 1.846E-5
 
 mesh = meshes[0]
@@ -189,12 +190,12 @@ for c in range(ncells):
         massfracPrev[c] = 1.0
         cpPrev[c] = rhoH20
         cp[c] = rhoH20
-    #rho[c] = rhoH20
-    #mu[c] = muAir
-    rho[c] = massfrac[c]*rhoH20 + (1.0-massfrac[c])*rhoAir
-    rhoPrev[c] = massfrac[c]*rhoH20 + (1.0-massfrac[c])*rhoAir
-    mu[c] = massfrac[c]*muH20 + (1.0-massfrac[c])*muAir
-    source[c] = grav*rho[c]
+    rho[c] = rhoAir
+    mu[c] = muAir
+    #rho[c] = massfrac[c]*rhoH20 + (1.0-massfrac[c])*rhoAir
+    #rhoPrev[c] = massfrac[c]*rhoH20 + (1.0-massfrac[c])*rhoAir
+    #mu[c] = massfrac[c]*muH20 + (1.0-massfrac[c])*muAir
+    #source[c] = grav*rho[c]
 
 fg = mesh.getInteriorFaceGroup()
 faces = fg.site
@@ -217,12 +218,12 @@ writer.finish()
 
 
 pdb.set_trace()
-while (numTimeSteps < 10):
+while (numTimeSteps < 100):
     for j in range(300):
         #solve for flow field
         flowConverged = fmodel.advance(1)
-        writer = exporters.VTKWriterA(geomFields,meshes,"flow-" + str(numTimeSteps) + ".vtk",
-                              "FlowField",False,0)
+        #writer = exporters.VTKWriterA(geomFields,meshes,"flow-" + str(numTimeSteps) + ".vtk",
+        #                      "FlowField",False,0)
         #Write interim velocity field
         #writer.init()
         #writer.writeScalarField(flowFields.pressure,"Pressure")
@@ -246,28 +247,29 @@ while (numTimeSteps < 10):
         #    cresid[c1] = cresid[c1] + flux[f]
 
         #solve for VOF field
-        vofConverged = tmodel.advance(1)
+        #vofConverged = tmodel.advance(1)
         #update density and viscosity
-        for c in range(ncells):
-            vof = massfrac[c]*rho[c]/rhoH20
-            rho[c] = vof[c]*rhoH20 + (1.0-vof[c])*rhoAir
-            cp[c] = rho[c]
-            mu[c] = vof[c]*muH20 + (1.0-vof[c])*muAir
-            source[c] = grav*rho[c]
+        #for c in range(ncells):
+        #    vof = massfrac[c]*rho[c]/rhoH20
+        #    rho[c] = vof*rhoH20 + (1.0-vof)*rhoAir
+        #    cp[c] = rho[c]
+        #    mu[c] = vof*muH20 + (1.0-vof)*muAir
+        #    source[c] = grav*rho[c]
 
-        if(flowConverged and vofConverged):
+        if(flowConverged):
+        #if(flowConverged and vofConverged):
             break
     else:
         raise NameError('Flow field did not converge in given number of iterations')
 
     fmodel.updateTime()
-    tmodel.updateTime()
+    #tmodel.updateTime()
     numTimeSteps = numTimeSteps + 1
     writer = exporters.VTKWriterA(geomFields,meshes,"flow-" + str(numTimeSteps) + ".vtk",
                               "FlowField",False,0)
     writer.init()
     writer.writeScalarField(flowFields.pressure,"Pressure")
-    writer.writeScalarField(thermalFields.temperature, "VOF")
+    #writer.writeScalarField(thermalFields.temperature, "MassFrac")
     writer.writeScalarField(flowFields.density,"Density")
     writer.writeScalarField(flowFields.viscosity,"Viscosity")
     writer.writeVectorField(flowFields.velocity,"Velocity")
