@@ -105,8 +105,8 @@ vcZone['density'] = rhoAir
 vcZone['specificHeat'] = 1.0
 
 momSolver = fvmbaseExt.AMG()
-momSolver.relativeTolerance = 1e-15
-momSolver.absoluteTolerance = 1.e-15
+momSolver.relativeTolerance = 1e-1
+#momSolver.absoluteTolerance = 1.e-15
 momSolver.nMaxIterations = 200
 momSolver.maxCoarseLevels=20
 momSolver.verbosity=0
@@ -116,8 +116,8 @@ contSolver = fvmbaseExt.AMG()
 #pc.verbosity=0
 #contSolver = fvmbaseExt.BCGStab()
 #contSolver.preconditioner = pc
-contSolver.relativeTolerance = 1e-15
-contSolver.absoluteTolerance = 1.e-15
+contSolver.relativeTolerance = 1e-1
+#contSolver.absoluteTolerance = 1.e-15
 contSolver.nMaxIterations = 200
 contSolver.verbosity=0
 contSolver.maxCoarseLevels=20
@@ -126,8 +126,8 @@ pc = fvmbaseExt.AMG()
 pc.verbosity = 0
 tempSolver = fvmbaseExt.BCGStab()
 tempSolver.preconditioner = pc
-tempSolver.relativeTolerance = 1.e-15
-tempSolver.absoluteTolerance = 1.e-15
+tempSolver.relativeTolerance = 1.e-1
+#tempSolver.absoluteTolerance = 1.e-15
 tempSolver.nMaxIteractions = 200
 tempSolver.verbosity = 0
 
@@ -146,8 +146,8 @@ foptions.printNormalizedResiduals = True
 foptions.transient = True
 foptions.setVar("timeStep",0.01)
 
-toptions.relativeTolerance=1e-6
-toptions.absoluteTolerance=1e-6
+toptions.relativeTolerance=1e-3
+toptions.absoluteTolerance=1e-3
 toptions.setVar("initialTemperature",0.0)
 toptions.enthalpyModel = False
 toptions.polynomialCp = False
@@ -220,10 +220,18 @@ writer.writeVectorField(flowFields.velocity,"Velocity")
 writer.finish()
 
 while (numTimeSteps < 100):
-    for j in range(300):
+    for j in range(3000):
         flowConverged = fmodel.advance(1)
         mfracFlux[:] = massFlux[:]
         mfracConverged = tmodel.advance(1)
+        
+        #Divide current density out of mass flux fields
+        for f in range(intFaces.getCount()):
+            c0 = intFaceCells(f,0)
+            c1 = intFaceCells(f,1)
+            den = 0.5*(rho[c0]+rho[c1])
+            intMassFlux[f] = intMassFlux[f]/den
+
         #Update density and source fields
         for c in range(cells.getSelfCount()):
             vof = mfrac[c]*rho[c]/rhoH20                                                                                   
@@ -232,12 +240,12 @@ while (numTimeSteps < 100):
             mu[c] = vof*muH20 + (1.0-vof)*muAir                                                                               
             source[c] = grav*rho[c]
             
-        #Update mass flux at interior faces
+        #Update mass flux at interior faces with new density
         for f in range(intFaces.getCount()):
             c0 = intFaceCells(f,0)
             c1 = intFaceCells(f,1)
-            intMassFlux[f] = 0.5*(np.dot(V[c0,:],intFaceArea[f,:])*rho[c0] +
-                                  np.dot(V[c1,:],intFaceArea[f,:])*rho[c1])
+            den = 0.5*(rho[c0]+rho[c1])
+            intMassFlux[f] = intMassFlux[f]*den
 
         if(flowConverged and mfracConverged):
             break
