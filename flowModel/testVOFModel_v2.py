@@ -101,7 +101,7 @@ tmodel.printBCs()
 vcmap = tmodel.getVCMap()
 vcZone = vcmap[meshes[0].getID()]
 vcZone['thermalConductivity'] = 1.0E-12
-vcZone['density'] = rhoAir
+vcZone['density'] = rhoH20
 vcZone['specificHeat'] = 1.0
 
 momSolver = fvmbaseExt.AMG()
@@ -184,27 +184,25 @@ massFlux = flowFields.massFlux[faces].asNumPyArray()
 intMassFlux = flowFields.massFlux[intFaces].asNumPyArray()
 V = flowFields.velocity[cells].asNumPyArray()
 
-mfrac = thermalFields.temperature[cells].asNumPyArray()
-mfracPrev = thermalFields.temperatureN1[cells].asNumPyArray()
+vof = thermalFields.temperature[cells].asNumPyArray()
+vofPrev = thermalFields.temperatureN1[cells].asNumPyArray()
 cp = thermalFields.specificHeat[cells].asNumPyArray()
 cpPrev = thermalFields.specificHeatN1[cells].asNumPyArray()
-mfracFlux = thermalFields.convectionFlux[faces].asNumPyArray()
+vofFlux = thermalFields.convectionFlux[faces].asNumPyArray()
 
 grav = np.array([0.0,-9.81,0.0])
 
-source[:] = 0.0
+#source[:] = 0.0
 
 for c in range(cells.getSelfCount()):
     x = CellCoord[c,0]
     if x <= 0.03:
-        mfrac[c] = 1.0
-        mfracPrev[c] = 1.0
-    rho[c] = mfrac[c]*rhoH20 + (1.0-mfrac[c])*rhoAir
+        vof[c] = 1.0
+        vofPrev[c] = 1.0
+    rho[c] = vof[c]*rhoH20 + (1.0-vof[c])*rhoAir
     rhoPrev[c] = rho[c]
-    cp[c] = rho[c]
-    cpPrev[c] = rho[c]
     source[c] = rho[c]*grav
-    mu[c] = mfrac[c]*muH20 + (1.0-mfrac[c])*muAir
+    mu[c] = vof[c]*muH20 + (1.0-vof[c])*muAir
 
 
 
@@ -213,7 +211,7 @@ writer = exporters.VTKWriterA(geomFields,meshes,"flow-" + str(numTimeSteps) + ".
                               "FlowField",False,0)
 writer.init()
 writer.writeScalarField(flowFields.pressure,"Pressure")
-writer.writeScalarField(thermalFields.temperature, "mfrac")
+writer.writeScalarField(thermalFields.temperature, "VOF")
 writer.writeScalarField(flowFields.density,"Density")
 writer.writeScalarField(flowFields.viscosity,"Viscosity")
 writer.writeVectorField(flowFields.velocity,"Velocity")
@@ -222,37 +220,23 @@ writer.finish()
 while (numTimeSteps < 100):
     for j in range(3000):
         flowConverged = fmodel.advance(1)
-        mfracFlux[:] = massFlux[:]
-        mfracConverged = tmodel.advance(1)
-        
-        #Divide current density out of mass flux fields
-        #for f in range(intFaces.getCount()):
-        #    c0 = intFaceCells(f,0)
-        #    c1 = intFaceCells(f,1)
-        #    den = 0.5*(rho[c0]+rho[c1])
-        #    intMassFlux[f] = intMassFlux[f]/den
-
+        #set face fluxes for vof transport
         for f in range(faces.getCount()):
             c0 = faceCells(f,0)
             c1 = faceCells(f,1)
             den = 0.5*(rho[c0]+rho[c1])
+            vofFlux[f] = massFlux[f]/den*rhoH20
             massFlux[f] = massFlux[f]/den
+
+        vofConverged = tmodel.advance(1)
 
         #Update density and source fields
         for c in range(cells.getSelfCount()):
-            vof = mfrac[c]*rho[c]/rhoH20                                                                                   
-            rho[c] = vof*rhoH20 + (1.0-vof)*rhoAir
-            cp[c] = rho[c]                                                                                                    
-            mu[c] = vof*muH20 + (1.0-vof)*muAir                                                                               
+            rho[c] = vof[c]*rhoH20 + (1.0-vof[c])*rhoAir
+            mu[c] = vof[c]*muH20 + (1.0-vof[c])*muAir                                                                               
             source[c] = grav*rho[c]
             
-        #Update mass flux at interior faces with new density
-        #for f in range(intFaces.getCount()):
-        #    c0 = intFaceCells(f,0)
-        #    c1 = intFaceCells(f,1)
-        #    den = 0.5*(rho[c0]+rho[c1])
-        #    intMassFlux[f] = intMassFlux[f]*den
-
+        #Update mass flux at faces with new density
         for f in range(faces.getCount()):
             c0 = faceCells(f,0)
             c1 = faceCells(f,1)
@@ -270,7 +254,7 @@ while (numTimeSteps < 100):
                               "FlowField",False,0)
     writer.init()
     writer.writeScalarField(flowFields.pressure,"Pressure")
-    writer.writeScalarField(thermalFields.temperature, "mfrac")
+    writer.writeScalarField(thermalFields.temperature, "VOF")
     writer.writeScalarField(flowFields.density,"Density")
     writer.writeScalarField(flowFields.viscosity,"Viscosity")
     writer.writeVectorField(flowFields.velocity,"Velocity")
